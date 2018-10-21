@@ -11,45 +11,73 @@ import numpy as np
 import scipy
 from scipy.io import loadmat
 import time, os, re, nltk
-
+from konlpy.tag import Twitter
 from utils import *
 from model import *
 import model
 import matplotlib.pyplot as plt
 
+twitter=Twitter()
+
 ###======================== PREPARE DATA ====================================###
 print("Loading data from pickle ...")
 import pickle
-with open("_vocab.pickle", 'rb') as f:
+
+# 나의 vocab 가져오기
+with open("./data/word2index.pkl", 'rb') as f:
     vocab = pickle.load(f)
 
-with open("_image_train.pickle", 'rb') as f:
-    _, images_train = pickle.load(f)
-with open("_image_test.pickle", 'rb') as f:
-    _, images_test = pickle.load(f)
-with open("_n.pickle", 'rb') as f:
-    n_captions_train, n_captions_test, n_captions_per_image, n_images_train, n_images_test = pickle.load(f)
-with open("_caption.pickle", 'rb') as f:
-    captions_ids_train, captions_ids_test = pickle.load(f)
-# images_train_256 = np.array(images_train_256)
-# images_test_256 = np.array(images_test_256)
+# train/test image
+with open("./data/image_train.pkl", 'rb') as f:
+    images_train = pickle.load(f)
+with open("./data/image_test.pkl", 'rb') as f:
+    images_test = pickle.load(f)
 
-# plt.imshow(images_train)
-images_train = np.array(images_train)
-images_test = np.array(images_test)
+# test/train index
+with open("./data/test_idx.pkl", 'rb') as f:
+    captions_ids_train = pickle.load(f)
+with open("./data/train_idx.pkl", 'rb') as f:
+    captions_ids_test = pickle.load(f)
+# caption load
+with open("./data/posc2idx.pkl", 'rb') as f:
+    posc2idx = pickle.load(f)
 
-# print(n_captions_train, n_captions_test)
-# exit()
+# 데이터 확인하기 : 301개의 이미지 데이터까지만 로드
+images_train=images_train[:151]
+images_test=images_test[:150]
+train_idx=captions_ids_train[:151]
+test_idx=captions_ids_test[:150]
+
+# image channel 변환 하기
+print("channel : ",images_train[0].shape)
 
 ni = int(np.ceil(np.sqrt(batch_size)))
-# os.system("mkdir samples")
-# os.system("mkdir samples/step1_gan-cls")
-# os.system("mkdir checkpoint")
-tl.files.exists_or_mkdir("samples/step1_gan-cls")
-tl.files.exists_or_mkdir("samples/step_pretrain_encoder")
-tl.files.exists_or_mkdir("checkpoint")
-save_dir = "checkpoint"
+n_images_train=len(images_train)
+n_images_test=len(images_test)
+n_captions_train=len(train_idx)
+n_captions_test=len(test_idx)
 
+for i,story in enumerate(posc2idx):
+    posc2idx[i]=[sen for sen in posc2idx[i][:12]] # 12문장이 최소 문장의 갯수 : story끼리 묶지 않기!
+
+# flatten
+
+posc2idx=[sentence for story in posc2idx for sentence in story]
+
+
+print(".......데이터 확인하기.......")
+print("images_train : ",len(images_train)) # 151개의 이미지
+print("images_test : ",len(images_test)) # 150개의 이미지
+print("vocab: ", len(vocab)) # 76303 의 pos(형태소 개수)
+print("posc2idx : ",len(posc2idx)) # 301의 스토리
+print("test_idx : " ,len(test_idx)) # 150
+print("train_idx : " , len(train_idx)) # 151
+print(train_idx)
+print(test_idx)
+captions_ids_train=[posc2idx[id-1] for id in train_idx]
+captions_ids_test=[posc2idx[id+1] for id in test_idx]
+
+n_story=len(posc2idx)
 
 def main_train():
     ###======================== DEFIINE MODEL ===================================###
@@ -127,41 +155,46 @@ def main_train():
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     tl.layers.initialize_global_variables(sess)
 
-    # load the latest checkpoints
-    net_rnn_name = os.path.join(save_dir, 'net_rnn.npz')
-    net_cnn_name = os.path.join(save_dir, 'net_cnn.npz')
-    net_g_name = os.path.join(save_dir, 'net_g.npz')
-    net_d_name = os.path.join(save_dir, 'net_d.npz')
-
-    load_and_assign_npz(sess=sess, name=net_rnn_name, model=net_rnn)
-    load_and_assign_npz(sess=sess, name=net_cnn_name, model=net_cnn)
-    load_and_assign_npz(sess=sess, name=net_g_name, model=net_g)
-    load_and_assign_npz(sess=sess, name=net_d_name, model=net_d)
+    # # load the latest checkpoints # error 발생
+    # net_rnn_name = os.path.join(save_dir, 'net_rnn.npz')
+    # net_cnn_name = os.path.join(save_dir, 'net_cnn.npz')
+    # net_g_name = os.path.join(save_dir, 'net_g.npz')
+    # net_d_name = os.path.join(save_dir, 'net_d.npz')
+    #
+    # load_and_assign_npz(sess=sess, name=net_rnn_name, model=net_rnn)
+    # load_and_assign_npz(sess=sess, name=net_cnn_name, model=net_cnn)
+    # load_and_assign_npz(sess=sess, name=net_g_name, model=net_g)
+    # load_and_assign_npz(sess=sess, name=net_d_name, model=net_d)
 
     ## seed for generation, z and sentence ids
     sample_size = batch_size
     sample_seed = np.random.normal(loc=0.0, scale=1.0, size=(sample_size, z_dim)).astype(np.float32)
         # sample_seed = np.random.uniform(low=-1, high=1, size=(sample_size, z_dim)).astype(np.float32)]
     n = int(sample_size / ni)
-    sample_sentence = ["the flower shown has yellow anther red pistil and bright red petals."] * n + \
-                      ["this flower has petals that are yellow, white and purple and has dark lines"] * n + \
-                      ["the petals on this flower are white with a yellow center"] * n + \
-                      ["this flower has a lot of small round pink petals."] * n + \
-                      ["this flower is orange in color, and has petals that are ruffled and rounded."] * n + \
-                      ["the flower has yellow petals and the center of it is brown."] * n + \
-                      ["this flower has petals that are blue and white."] * n +\
-                      ["these white flowers have petals that start off white in color and end in a white towards the tips."] * n
-    print("1 sample sentence : ", sample_sentence)
+
+    # 포켓몬 스토리를 input으로 넣기
+    sample_sentence=["발끝에서 기름이 베어 나와 물 위를 미끄러지듯 걸을 수 있다."]*n+\
+                    ["연못이나 호수의 미생물을 먹고 있다."]*n + \
+                    ["위험을 감지하면 머리끝에서 물엿같이 달콤한 액체가 나온다."] * n + \
+                    ["등에는 커다란 등껍질을 가지고 있다."] * n + \
+                    ["소나기가 온 뒤에 웅덩이에 모여들고 있다."] * n + \
+                    ["물의 표면을 미끌어 지듯이 가서 머리로부터 달콤한 향기의 꿀을 나오게 한다."] * n + \
+                    ["보통은 연못에서 살고 있지만 소나기가 온 뒤에는 마을 안의 물웅덩이에 모습을 드러낸다."] * n + \
+                    ["머리 앞쪽에서 물엿과 비슷한 달콤한 냄새의 액체를 낸다. "] * n
+
+
+
+
     # sample_sentence = captions_ids_test[0:sample_size]
-    for i, sentence in enumerate(sample_sentence): # 한 문장씩 뽑아준다
+    for i, sentence in enumerate(sample_sentence):
         print("seed: %s" % sentence)
         sentence = preprocess_caption(sentence)
-        sample_sentence[i] = [vocab.word_to_id(word) for word in nltk.tokenize.word_tokenize(sentence)] + [vocab.end_id]    # add END_ID : 문장이 끝 마쳤다는 신호 : 추가해야하나
-        print("2 sample sentence[i] : ", sample_sentence[i])
+        sample_sentence[i] = [vocab['<start>']]+[vocab[word[0]] for word in twitter.pos(sentence)] + [vocab['<end>']]    # add END_ID : end -sign을 부여해야 하는가
         # sample_sentence[i] = [vocab.word_to_id(word) for word in sentence]
         # print(sample_sentence[i])
+
     sample_sentence = tl.prepro.pad_sequences(sample_sentence, padding='post')
-    print("3 sample sentence : ", sample_sentence)
+
     n_epoch = 100 # 600
     print_freq = 1
     n_batch_epoch = int(n_images_train / batch_size)
@@ -183,24 +216,29 @@ def main_train():
             step_time = time.time()
             ## get matched text
             idexs = get_random_int(min=0, max=n_captions_train-1, number=batch_size)
-            b_real_caption = captions_ids_train[idexs]
-            b_real_caption = tl.prepro.pad_sequences(b_real_caption, padding='post')
+
+            b_real_caption=[captions_ids_train[id-1] for id in idexs] # 여러개의 스토리 추출 : batch_size = 문장의 개수
+           # 문장의 집합으로 바꿔줘야 한다. 하지만 스토리마다 문장길이가 다른 문제를 해결해야한다. -> 문장길이 12로 통일하기
+            b_real_caption = tl.prepro.pad_sequences(b_real_caption, padding='post') # matrix 형태로 변환하기
             ## get real image
-            b_real_images = images_train[np.floor(np.asarray(idexs).astype('float')/n_captions_per_image).astype('int')]
+            # b_real_images = images_train[np.floor(np.asarray(idexs).astype('float') / 12).astype('int')]
+            b_real_images=[images_train[id] for id in np.floor(np.asarray(idexs).astype('float') / 12).astype('int')]
             # save_images(b_real_images, [ni, ni], 'samples/step1_gan-cls/train_00.png')
             ## get wrong caption
             idexs = get_random_int(min=0, max=n_captions_train-1, number=batch_size)
-            b_wrong_caption = captions_ids_train[idexs]
-            b_wrong_caption = tl.prepro.pad_sequences(b_wrong_caption, padding='post')
+
+            b_wrong_caption=[captions_ids_train[id-1] for id in idexs]
+            b_wrong_caption = tl.prepro.pad_sequences(b_wrong_caption, padding='post') # matrix 형태로 변환
             ## get wrong image
             idexs2 = get_random_int(min=0, max=n_images_train-1, number=batch_size)
-            b_wrong_images = images_train[idexs2]
+
+            b_wrong_images=[images_train[id] for id in idexs2]
             ## get noise
             b_z = np.random.normal(loc=0.0, scale=1.0, size=(sample_size, z_dim)).astype(np.float32)
                 # b_z = np.random.uniform(low=-1, high=1, size=[batch_size, z_dim]).astype(np.float32)
 
             b_real_images = threading_data(b_real_images, prepro_img, mode='train')   # [0, 255] --> [-1, 1] + augmentation
-            b_wrong_images = threading_data(b_wrong_images, prepro_img, mode='train')
+            b_wrong_images = threading_data(b_wrong_images, prepro_img, mode='train') # chnnel 4인 문제를 해결해야한다.
             ## updates text-to-image mapping
             if epoch < 50:
                 errRNN, _ = sess.run([rnn_loss, rnn_optim], feed_dict={
@@ -229,7 +267,7 @@ def main_train():
         if (epoch + 1) % print_freq == 0:
             print(" ** Epoch %d took %fs" % (epoch, time.time()-start_time))
             img_gen, rnn_out = sess.run([net_g.outputs, net_rnn.outputs], feed_dict={
-                                        t_real_caption : sample_sentence,
+                                        t_real_caption : sample_sentence, # sample_sentence가 generator의 input으로 들어간다
                                         t_z : sample_seed})
 
             # img_gen = threading_data(img_gen, prepro_img, mode='rescale')
@@ -479,14 +517,3 @@ if __name__ == '__main__':
 
 
 
-
-
-
-
-
-
-
-
-
-
-#
