@@ -7,6 +7,8 @@ import numpy as np
 import re
 import string
 
+import matplotlib.pyplot as plt
+
 """ The functions here will be merged into TensorLayer after finishing this project.
 """
 
@@ -57,21 +59,41 @@ def preprocess_caption(line):
     prep_line = prep_line.replace('-', ' ')
     return prep_line
 
+def scale(array): # 하나의 1차원
+    _min=np.min(array)
+    _max=np.max(array)
+    return ((array-_min)/(_max-_min))*255 # 정규화
+
 
 ## Save images
 def merge(images, size):
-    h, w = images.shape[1], images.shape[2]
+    h, w = images.shape[1], images.shape[2] # img_gen :  (64, 64, 64, 3)
+    # print("h, w : ",h,w)
     img = np.zeros((h * size[0], w * size[1], 3))
-    for idx, image in enumerate(images):
-        i = idx % size[1]
-        j = idx // size[1]
+    for idx, image in enumerate(images): # images : batch_size개수만큼의 image
+        i = idx % size[1] # 나머지
+        j = idx // size[1] # 몫
         img[j*h:j*h+h, i*w:i*w+w, :] = image
     return img
 
-def imsave(images, size, path):
-    return scipy.misc.imsave(path, merge(images, size))
+def imsave(images, size, path): #
+    #print("merge  : ", merge(images,size).shape) # merge.shape  :  (512, 512, 3)
+    #print("merge  : ", np.min(merge(images, size))) # min(merge)  :  -0.49158868193626404 # imsave 0~255사이의 값으로 저장해야한다.
+    # -값에 대해서 어떻게 처리해야하는지
+    images=merge(images,size)
+    image_0=scale(images[:,:,0])
+    image_1=scale(images[:,:,1])
+    image_2=scale(images[:,:,2])
+    image=np.zeros(images.shape)
+    image[:,:,0]=image_0
+    image[:, :, 1] = image_1
+    image[:, :, 2] = image_2
 
-def save_images(images, size, image_path):
+    #image=image[:255,:255,:]
+
+    return plt.imsave(path,image) # error 발생 : path 때문인가 path 설정확인하기
+
+def save_images(images, size, image_path):  # error 발생 imsave와 연결됨
     return imsave(images, size, image_path)
 
 from tensorlayer.prepro import *

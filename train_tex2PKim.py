@@ -78,14 +78,14 @@ captions_ids_train=[posc2idx[id-1] for id in train_idx]
 captions_ids_test=[posc2idx[id+1] for id in test_idx]
 
 n_story=len(posc2idx)
-
+save_dir="./save_dir"
 def main_train():
     ###======================== DEFIINE MODEL ===================================###
     t_real_image = tf.placeholder('float32', [batch_size, image_size, image_size, 3], name = 'real_image')
     t_wrong_image = tf.placeholder('float32', [batch_size ,image_size, image_size, 3], name = 'wrong_image')
     t_real_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], name='real_caption_input')
     t_wrong_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], name='wrong_caption_input')
-    t_z = tf.placeholder(tf.float32, [batch_size, z_dim], name='z_noise')
+    t_z = tf.placeholder(tf.float32, [batch_size, z_dim], name='z_noise') # generator input
 
     ## training inference for text-to-image mapping
     net_cnn = cnn_encoder(t_real_image, is_train=True, reuse=False)
@@ -155,16 +155,16 @@ def main_train():
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     tl.layers.initialize_global_variables(sess)
 
-    # # load the latest checkpoints # error 발생
-    # net_rnn_name = os.path.join(save_dir, 'net_rnn.npz')
-    # net_cnn_name = os.path.join(save_dir, 'net_cnn.npz')
-    # net_g_name = os.path.join(save_dir, 'net_g.npz')
-    # net_d_name = os.path.join(save_dir, 'net_d.npz')
-    #
-    # load_and_assign_npz(sess=sess, name=net_rnn_name, model=net_rnn)
-    # load_and_assign_npz(sess=sess, name=net_cnn_name, model=net_cnn)
-    # load_and_assign_npz(sess=sess, name=net_g_name, model=net_g)
-    # load_and_assign_npz(sess=sess, name=net_d_name, model=net_d)
+    # load the latest checkpoints # error 발생
+    net_rnn_name = os.path.join(save_dir, 'net_rnn.npz')
+    net_cnn_name = os.path.join(save_dir, 'net_cnn.npz')
+    net_g_name = os.path.join(save_dir, 'net_g.npz')
+    net_d_name = os.path.join(save_dir, 'net_d.npz')
+
+    load_and_assign_npz(sess=sess, name=net_rnn_name, model=net_rnn)
+    load_and_assign_npz(sess=sess, name=net_cnn_name, model=net_cnn)
+    load_and_assign_npz(sess=sess, name=net_g_name, model=net_g)
+    load_and_assign_npz(sess=sess, name=net_d_name, model=net_d)
 
     ## seed for generation, z and sentence ids
     sample_size = batch_size
@@ -270,8 +270,10 @@ def main_train():
                                         t_real_caption : sample_sentence, # sample_sentence가 generator의 input으로 들어간다
                                         t_z : sample_seed})
 
+            # print("img_gen : ", img_gen.shape) # img_gen :  (64, 64, 64, 3)
+
             # img_gen = threading_data(img_gen, prepro_img, mode='rescale')
-            save_images(img_gen, [ni, ni], 'samples/step1_gan-cls/train_{:02d}.png'.format(epoch))
+            save_images(img_gen, [ni, ni], 'samples/step1_gan-cls/train_{:02d}.png'.format(epoch)) # error 발생
 
         ## save model
         if (epoch != 0) and (epoch % 10) == 0:
@@ -496,11 +498,11 @@ if __name__ == '__main__':
         main_train()
 
     ## you would not use this part, unless you want to try style transfer on GAN-CLS paper
-    # elif args.mode == "train_encoder":
-    #     main_train_encoder()
-    #
-    # elif args.mode == "translation":
-    #     main_transaltion()
+    elif args.mode == "train_encoder":
+        main_train_encoder()
+
+    elif args.mode == "translation":
+        main_transaltion()
 
 
 
