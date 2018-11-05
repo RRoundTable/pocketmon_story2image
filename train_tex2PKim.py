@@ -132,7 +132,7 @@ def main_train():
     g_loss = tl.cost.sigmoid_cross_entropy(disc_fake_image_logits, tf.ones_like(disc_fake_image_logits), name='g')
 
     ####======================== DEFINE TRAIN OPTS ==============================###
-    lr = 0.00001
+    lr = 0.003
     lr_decay = 0.3      # decay factor for adam, https://github.com/reedscot/icml2016/blob/master/main_cls_int.lua  https://github.com/reedscot/icml2016/blob/master/scripts/train_flowers.sh
     decay_every = 100   # https://github.com/reedscot/icml2016/blob/master/main_cls.lua
     beta1 = 0.5
@@ -174,11 +174,11 @@ def main_train():
         # sample_seed = np.random.uniform(low=-1, high=1, size=(sample_size, z_dim)).astype(np.float32)]
     n = int(sample_size / ni)
 
-    # 포켓몬 스토리를 input으로 넣기
+    # 포켓몬 스토리를 input으로 넣기 : 원래 문장으로 넣기
     sample_sentence=["발끝에서 기름이 베어 나와 물 위를 미끄러지듯 걸을 수 있다."]*n+\
                     ["연못이나 호수의 미생물을 먹고 있다."]*n + \
                     ["위험을 감지하면 머리끝에서 물엿같이 달콤한 액체가 나온다."] * n + \
-                    ["등에는 커다란 등껍질을 가지고 있다."] * n + \
+                    ["머리 앞쪽에서 물엿과 비슷한 달콤한 냄새의 액체를 낸다."] * n + \
                     ["소나기가 온 뒤에 웅덩이에 모여들고 있다."] * n + \
                     ["물의 표면을 미끌어 지듯이 가서 머리로부터 달콤한 향기의 꿀을 나오게 한다."] * n + \
                     ["보통은 연못에서 살고 있지만 소나기가 온 뒤에는 마을 안의 물웅덩이에 모습을 드러낸다."] * n + \
@@ -198,7 +198,7 @@ def main_train():
     sample_sentence = tl.prepro.pad_sequences(sample_sentence, padding='post')
 
     n_epoch = 10000 # 600
-    print_freq = 1
+    print_freq = 4
     n_batch_epoch = int(n_images_train / batch_size)
     # exit()
     for epoch in range(0, n_epoch+1):
@@ -267,6 +267,7 @@ def main_train():
             print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4fs, d_loss: %.8f, g_loss: %.8f, rnn_loss: %.8f" \
                         % (epoch, n_epoch, step, n_batch_epoch, time.time() - step_time, errD, errG, errRNN))
 
+        # 살펴보기
         if (epoch + 1) % print_freq == 0:
             print(" ** Epoch %d took %fs" % (epoch, time.time()-start_time))
             img_gen, rnn_out = sess.run([net_g.outputs, net_rnn.outputs], feed_dict={
@@ -276,6 +277,7 @@ def main_train():
             # print("img_gen : ", img_gen.shape) # img_gen :  (64, 64, 64, 3)
 
             # img_gen = threading_data(img_gen, prepro_img, mode='rescale')
+            print("Save image : ", epoch)
             save_images(img_gen, [ni, ni], 'samples/step1_gan-cls/train_{:02d}.png'.format(epoch)) # error 발생
 
         ## save model
@@ -292,6 +294,7 @@ def main_train():
             tl.files.save_npz(net_g.all_params, name=net_g_name+str(epoch), sess=sess)
             tl.files.save_npz(net_d.all_params, name=net_d_name+str(epoch), sess=sess)
 
+        # 일단 사용안함
         # if (epoch != 0) and (epoch % 200) == 0:
         #     sess.run(tf.initialize_variables(adam_vars))
         #     print("Re-initialize Adam")
@@ -438,8 +441,9 @@ def main_transaltion():
     # idexs = get_random_int(min=0, max=n_captions_train-1, number=batch_size, seed=100)  # train set
     # images = images_train[np.floor(np.asarray(idexs).astype('float')/n_captions_per_image).astype('int')]
     # sample_sentence = captions_ids_train[idexs]
-    idexs = get_random_int(min=0, max=n_captions_test-1, number=batch_size, seed=100) # test set
-    images = images_test[np.floor(np.asarray(idexs).astype('float')/n_captions_per_image).astype('int')]
+    idexs = get_random_int(min=0, max=n_captions_test-1, number=batch_size) # test set
+    n_captions_per_image=12
+    images = [images_test[id] for id in np.floor(np.asarray(idexs).astype('float')/n_captions_per_image).astype('int')]
     for i in [0,8,16,24,32,40,48,56]:
         images[i] = images_test[1834]     # DONE easy 226
         images[i+1] = images_test[620]    # stand on big staff
@@ -462,16 +466,17 @@ def main_transaltion():
     # sample_sentence = captions_ids_test[idexs]
     images = threading_data(images, prepro_img, mode='translation')
     save_images(images, [ni, ni], 'samples/translation/_reed_method_ori.png')
+    n = int(batch_size / ni)
 
     # all done
-    sample_sentence = ["This small bird has a blue crown and white belly."] * ni + \
-                      ["This small yellow bird has grey wings, and a black bill."] * ni + \
-                      ["This particular bird with a red head and breast and features grey wings."] * ni + \
-                      ["This black bird has no other colors with a short bill."] * ni + \
-                      ["An orange bird with green wings and blue head."] * ni + \
-                      ["A black bird with a red head."] * ni + \
-                      ["A red body bird with black wings and a gray beak."] * ni + \
-                      ["A small brown bird with a brown crown has a white belly."] * ni
+    sample_sentence = ["발끝에서 기름이 베어 나와 물 위를 미끄러지듯 걸을 수 있다."] * n + \
+                      ["연못이나 호수의 미생물을 먹고 있다."] * n + \
+                      ["위험을 감지하면 머리끝에서 물엿같이 달콤한 액체가 나온다."] * n + \
+                      ["등에는 커다란 등껍질을 가지고 있다."] * n + \
+                      ["소나기가 온 뒤에 웅덩이에 모여들고 있다."] * n + \
+                      ["물의 표면을 미끌어 지듯이 가서 머리로부터 달콤한 향기의 꿀을 나오게 한다."] * n + \
+                      ["보통은 연못에서 살고 있지만 소나기가 온 뒤에는 마을 안의 물웅덩이에 모습을 드러낸다."] * n + \
+                      ["머리 앞쪽에서 물엿과 비슷한 달콤한 냄새의 액체를 낸다. "] * n
 
     for i, sentence in enumerate(sample_sentence):
         print("seed: %s" % sentence)
@@ -498,7 +503,7 @@ if __name__ == '__main__':
                        help='train, train_encoder, translation')
 
     args = parser.parse_args()
-    args.mode='train_encoder'
+    # args.mode='translation'
     if args.mode == "train":
         main_train()
 
